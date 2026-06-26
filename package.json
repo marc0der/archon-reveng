@@ -1,0 +1,29 @@
+{
+  "name": "archon-reveng",
+  "version": "0.1.0",
+  "description": "Scaffold the reveng reverse-engineering pipeline (an Archon human-in-the-loop DAG workflow) into any project.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "archon-reveng": "bin/cli.ts"
+  },
+  "files": [
+    "bin",
+    "template"
+  ],
+  "keywords": [
+    "archon",
+    "reveng",
+    "reverse-engineering",
+    "ai",
+    "agent",
+    "workflow",
+    "scaffold"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
