@@ -280,6 +280,8 @@ archon-reveng/
 - **`README.md`** — the front door for anyone picking up the project; mirror
   [archon-ralph's README](https://github.com/marc0der/archon-ralph/blob/HEAD/README.md) and cover:
   - **What it is** — one-paragraph purpose + the HITL-DAG mental model.
+  - **Diagram** — render the DAG as a GitHub-native mermaid `flowchart TD` (vertical; gates and
+    loops visually distinct via `classDef`). **Not** ASCII art — it breaches GitHub's render width.
   - **Requirements** — the [marc0der/Archon](https://github.com/marc0der/Archon) **fork** (and why),
     **Bun** (a *runtime* dep — the workflow's script/loop nodes run via `bun run`), Claude Code
     (authenticated), git, and optional `mmdc` + headless Chromium for diagram validation (full list
