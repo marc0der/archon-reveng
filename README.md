@@ -16,24 +16,35 @@ project's `.archon/` by a `bunx` installer.
 Give it three inputs (`screenshots/`, `transcripts/`, `src/`); it produces an `output/` tree of
 analyses, a PRD, a feature plan, and one spec per feature. Between those, it stops twice for you:
 
-```
-inputs ─▶ precondition ─▶ ┌ behaviour-extraction ┐
-                          ├ schema-extraction     ├─▶ domain-modelling     ┐
-                          ├ screen-reconstruction │   interaction-mapping  ├─▶ requirements-synthesis
-                          └ interview-curation    ┘                        ┘            │
-                                                                                        ▼
-                                                                                 mermaid-validate
-                                                                                        │
-                                                              ╔═════════════════════════▼═══╗
-                                                              ║  GATE 1 — review the PRD     ║
-                                                              ╚═════════════════════════╤═══╝
-                                                                                        ▼
-                                                                             feature-decomposition
-                                                              ╔═════════════════════════▼═══╗
-                                                              ║  GATE 2 — review the plan    ║
-                                                              ╚═════════════════════════╤═══╝
-                                                                                        ▼
-                                                              feature-specification ─▶ report
+```mermaid
+flowchart TD
+    inputs(["screenshots/ · transcripts/ · src/"]):::io --> pre[precondition]
+
+    pre --> be[behaviour-extraction]
+    pre --> se[schema-extraction]
+    pre --> sr[[screen-reconstruction<br/>loop]]:::loop
+    pre --> ic[[interview-curation<br/>loop]]:::loop
+
+    sr --> dm[domain-modelling]
+    ic --> dm
+    sr --> im[interaction-mapping]
+    ic --> im
+
+    be --> rs[requirements-synthesis]
+    se --> rs
+    dm --> rs
+    im --> rs
+
+    rs --> mv[mermaid-validate]
+    mv --> g1{{"GATE 1 — review the PRD"}}:::gate
+    g1 --> fd[feature-decomposition]
+    fd --> g2{{"GATE 2 — review the plan"}}:::gate
+    g2 --> fs[feature-specification]
+    fs --> rep[report]
+
+    classDef io fill:#eeeeee,stroke:#999999,color:#000000;
+    classDef loop fill:#e3f0ff,stroke:#3b82f6,color:#000000;
+    classDef gate fill:#ffe8c2,stroke:#d98a00,stroke-width:2px,color:#000000;
 ```
 
 The two loops (`screen-reconstruction`, `interview-curation`) chew through one file per fresh
