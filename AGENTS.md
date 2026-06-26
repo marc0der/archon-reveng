@@ -54,6 +54,23 @@ The package is **being built from a spec** — most of it does not exist yet.
 - The build is **complete** when the Definition of Done (spec §11) is met. No live end-to-end Claude
   run is required.
 
+## Guardrails (loop rules)
+
+- **The spec is the contract.** Build only what `specs/archon-reveng.md` defines; §12 Out of Scope
+  is binding. Stop when the §11 Definition of Done is green — do not gold-plate.
+- **Never edit `specs/` or this `AGENTS.md`** — they are immutable inputs.
+- **Port, don't author.** For each command file, fetch the real reveng source prompt (spec §6) and
+  apply the delta — never write one from memory.
+- **Commit only green.** Before every commit run `bun test` *and* `archon validate workflows reveng
+  && archon validate commands`; never commit a red tree.
+- **Never weaken or delete a test to make it pass** — fix the code. The only legitimate skip is the
+  mmdc-absent mermaid present-cases.
+- **Reference repos are READ-ONLY** — only write inside `archon-reveng/`. No force-push, no history
+  rewrite, no `git clean -fd`.
+- **Don't chase Chromium** — `mermaid-validate` degrades to `skipped` by design.
+- **One plan item per fresh iteration**, then test → commit → mark done; keep
+  `IMPLEMENTATION_PLAN.md` / `PROGRESS.md` truthful and skip completed work.
+
 ## Conventions
 
 - British English; keep prompts **stack-agnostic** (discover the target's language/framework/DB at
