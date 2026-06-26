@@ -49,8 +49,10 @@ The package is **being built from a spec** — most of it does not exist yet.
 ## Build & validate
 
 - `bun test` — unit tests for the deterministic control scripts (`template/scripts/*.test.ts`).
-- `archon validate workflows reveng` and `archon validate commands` — the workflow/command
-  validation seam (needs the fork installed).
+- `archon validate workflows reveng` — validates the workflow file `template/workflows/reveng.yaml`
+  (graph resolves, both gates well-formed, loops carry `until`). `archon validate commands` validates
+  the command files. This is the validation seam — run it before every commit (needs the fork
+  installed; source form `bun run cli validate …`).
 - The build is **complete** when the Definition of Done (spec §11) is met. No live end-to-end Claude
   run is required.
 
