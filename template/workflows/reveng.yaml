@@ -1,0 +1,197 @@
+name: reveng
+description: |
+  Use when: User wants to reverse-engineer a legacy application into a PRD and
+            decomposed feature specs from its screenshots, transcripts, and
+            source — a port of the marc0der/reveng pipeline into a single
+            human-in-the-loop Archon DAG.
+  Triggers: "reveng", "reverse engineer this app", "run reveng",
+            "screenshots + transcripts + src to PRD".
+  Does: Validates the three inputs, extracts behaviour + schema from src/ in
+        parallel with two curation loops (screenshots → HTML mockups,
+        transcripts → curated text), models the domain + interactions,
+        synthesises output/PRD.md, validates its mermaid diagrams, then PAUSES
+        at the PRD gate. After approval it decomposes the PRD into a feature
+        plan, PAUSES at the feature-plan gate, writes one spec per feature, and
+        reports.
+  NOT for: re-engineering / forward builds (use archon-ralph), PR reviews, or
+           one-off fixes.
+
+# REQUIRES the marc0der/Archon fork (https://github.com/marc0der/Archon): the
+# two curation loops resolve `loop.command:` to extracted command files
+# (.archon/commands/*.md), which upstream Archon does not support.
+#
+# IMPORTANT — model is set at the WORKFLOW level on purpose: loop nodes ignore a
+# per-node `model:` and always use the workflow-level model. The pipeline is
+# all-opus (Opus vision quality matters for screen-reconstruction); only the
+# read-only `report` node drops to sonnet.
+#
+# IMPORTANT — this workflow runs in the LIVE checkout (worktree.enabled: false)
+# and FOREGROUND (interactive: true): the two approval gates need an attached
+# human. Never invoke with `--detach`. Only one run per workspace at a time.
+provider: claude
+model: opus
+interactive: true
+worktree:
+  enabled: false
+
+nodes:
+  # ═══════════════════════════════════════════════════════════════════════
+  # PRECONDITION (script) — assert the three required inputs are populated:
+  # screenshots/ (≥1 image), transcripts/ (≥1 *.txt), src/ (≥1 file). Fails
+  # the run naming any missing input. Argument-free, cwd-relative (§7.1).
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: precondition
+    script: reveng-precondition
+    runtime: bun
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # BEHAVIOUR-EXTRACTION (command) — read src/ only, write
+  # output/behaviour-analysis.md. Reads no curated content, so it starts
+  # immediately, in parallel with the curation loops.
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: behaviour-extraction
+    depends_on: [precondition]
+    command: behaviour-extraction
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # SCHEMA-EXTRACTION (command) — read src/ only, write
+  # output/schema-analysis.md. Parallel with behaviour-extraction + loops.
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: schema-extraction
+    depends_on: [precondition]
+    command: schema-extraction
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # SCREEN-RECONSTRUCTION (loop) — one screenshot per FRESH iteration into
+  # output/html/<name>.html. The command processes the first unprocessed
+  # screenshot in sorted order and emits ALL_CURATED when none remain;
+  # until_bash (reveng-screen-cap) is the authoritative stop: exit 0 when
+  # every screenshot has its HTML. max_iterations is a safety ceiling (§7.2).
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: screen-reconstruction
+    depends_on: [precondition]
+    idle_timeout: 600000
+    loop:
+      command: screen-reconstruction
+      until: ALL_CURATED
+      max_iterations: 1000
+      fresh_context: true
+      until_bash: bun run .archon/scripts/reveng-screen-cap.ts
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # INTERVIEW-CURATION (loop) — one transcript per FRESH iteration into
+  # output/transcripts/<name>_curated.txt. Symmetric to screen-reconstruction;
+  # until_bash (reveng-interview-cap) is authoritative (§7.3).
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: interview-curation
+    depends_on: [precondition]
+    idle_timeout: 600000
+    loop:
+      command: interview-curation
+      until: ALL_CURATED
+      max_iterations: 1000
+      fresh_context: true
+      until_bash: bun run .archon/scripts/reveng-interview-cap.ts
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # DOMAIN-MODELLING (command) — consume curated content (both loops) and
+  # write output/domain-analysis.md.
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: domain-modelling
+    depends_on: [interview-curation, screen-reconstruction]
+    command: domain-modelling
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # INTERACTION-MAPPING (command) — consume curated content (both loops) and
+  # write output/interaction-analysis.md.
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: interaction-mapping
+    depends_on: [interview-curation, screen-reconstruction]
+    command: interaction-mapping
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # REQUIREMENTS-SYNTHESIS (command) — join all four analyses (default
+  # all_success: every input is required) and write output/PRD.md, preserving
+  # its Open Questions section (load-bearing for the abandon→re-interview
+  # branch and the report).
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: requirements-synthesis
+    depends_on: [behaviour-extraction, schema-extraction, domain-modelling, interaction-mapping]
+    command: requirements-synthesis
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # MERMAID-VALIDATE (script) — render the mermaid blocks in the analyses +
+  # PRD through mmdc. Self-probes and degrades to `skipped` when mmdc/Chromium
+  # is unusable; NEVER fails the run (exit 0 always). Surfaces broken diagrams
+  # at the PRD gate; does not block (§7.4).
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: mermaid-validate
+    depends_on: [requirements-synthesis]
+    script: reveng-mermaid-validate
+    runtime: bun
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # PRD-GATE (approval) — GATE 1. Pause for human review of output/PRD.md.
+  #   approve         → proceed to feature decomposition (hand-edits honoured)
+  #   reject "<fb>"   → branch 1: regenerate the PRD from the feedback
+  #   abandon         → branch 2: gather interviews, add transcripts, re-run
+  # The PRD's Open Questions section is the interview brief for branch 2 (§5).
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: prd-gate
+    depends_on: [mermaid-validate]
+    approval:
+      message: |
+        Review output/PRD.md (and the mermaid-validate status above).
+        - approve: proceed to feature decomposition (hand-edits honoured).
+        - reject "<feedback>": regenerate the PRD from your feedback.
+        - abandon: if the Open Questions need new interviews, abandon, add
+          transcripts, and re-run.
+      on_reject:
+        prompt: "User feedback: $REJECTION_REASON. Revise output/PRD.md accordingly."
+        max_attempts: 3
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # FEATURE-DECOMPOSITION (command) — decompose the approved PRD into a
+  # dependency-layered feature list with stable FT-NNN ids, written to
+  # output/feature-plan.md. Spawns no writers; the gate owns confirmation (§6).
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: feature-decomposition
+    depends_on: [prd-gate]
+    command: feature-decomposition
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # FEATURE-PLAN-GATE (approval) — GATE 2. Pause for human review of
+  # output/feature-plan.md, with the same three actions; reject regenerates
+  # the feature plan (§5).
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: feature-plan-gate
+    depends_on: [feature-decomposition]
+    approval:
+      message: |
+        Review output/feature-plan.md (the FT-NNN features and their layers).
+        - approve: proceed to write one spec per feature (hand-edits honoured).
+        - reject "<feedback>": regenerate the feature plan from your feedback.
+        - abandon: end the run.
+      on_reject:
+        prompt: "User feedback: $REJECTION_REASON. Revise output/feature-plan.md accordingly."
+        max_attempts: 3
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # FEATURE-SPECIFICATION (command) — read the confirmed feature plan and
+  # write one output/features/FT-*.md per feature. (The inline feature-writer
+  # sub-agent — the node's `agents:` block — is added with that command port.)
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: feature-specification
+    depends_on: [feature-plan-gate]
+    command: feature-specification
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # REPORT (command, sonnet) — read-only stdout summary: counts of HTML
+  # mockups, curated transcripts, feature specs; the four analyses + PRD
+  # presence; the number of Open Questions; the mermaid-validate status.
+  # Writes nothing (§7.5).
+  # ═══════════════════════════════════════════════════════════════════════
+  - id: report
+    depends_on: [feature-specification]
+    model: sonnet
+    command: report
