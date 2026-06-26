@@ -281,7 +281,9 @@ archon-reveng/
   [archon-ralph's README](https://github.com/marc0der/archon-ralph/blob/HEAD/README.md) and cover:
   - **What it is** — one-paragraph purpose + the HITL-DAG mental model.
   - **Requirements** — the [marc0der/Archon](https://github.com/marc0der/Archon) **fork** (and why),
-    Bun, Claude Code, and (optional) `mmdc` + headless Chromium for diagram validation.
+    **Bun** (a *runtime* dep — the workflow's script/loop nodes run via `bun run`), Claude Code
+    (authenticated), git, and optional `mmdc` + headless Chromium for diagram validation (full list
+    in §8.1).
   - **Install** — `bunx github:marc0der/archon-reveng init` and what it scaffolds (`.archon/` +
     the workspace input/output dirs + `.gitignore`).
   - **Inputs** — the three required dirs (`screenshots/`, `transcripts/`, `src/`) and what each holds.
@@ -298,6 +300,22 @@ archon-reveng/
   `PUPPETEER_EXECUTABLE_PATH`, plus Bun/Node for the scripts and tests. Document `nix-shell` as the
   one-step way to enable diagram validation; the manual path is `npm i -g @mermaid-js/mermaid-cli`
   **plus** a system Chromium.
+
+### 8.1 Dependencies & prerequisites
+
+| Dependency | When | Why |
+|------------|------|-----|
+| [Bun](https://bun.sh) | build **and runtime** | Runs/tests the TS control scripts; the workflow's `script:` nodes and loop `until_bash` execute via `bun run`; `bunx` runs the installer. Must be on `PATH` wherever Archon executes the run. |
+| [`marc0der/Archon`](https://github.com/marc0der/Archon) fork | build + runtime | Runs the workflow and provides `archon validate` (DoD). Upstream Archon will not work (§2). |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code), authenticated | runtime | The `claude` provider that executes the command/loop nodes. |
+| `git` | build + runtime | Repository; Archon's run/worktree model. |
+| `mmdc` + headless Chromium | optional (runtime + full test coverage) | Mermaid validation (§7.4); degrades to `skipped` when absent. `shell.nix` provides both. |
+
+- The vendored `template/` has **no runtime npm dependencies** — the control scripts import only
+  Node built-ins (mirrors archon-ralph). `template/package.json` carries `@types/bun` as a
+  dev-dependency for type-checking/editor DX only.
+- The mermaid-validate unit test's "present" cases require `mmdc` on `PATH` (use `shell.nix` in CI);
+  skip them when it is absent.
 
 ## 9. Models
 
@@ -338,7 +356,8 @@ These close the questions left open in earlier drafts; the build should not re-o
 - **Script unit tests** — `template/scripts/*.test.ts` (bun test), each driving a temp
   directory tree: `reveng-precondition` (missing/empty vs populated inputs), the two cap
   counters (skip-if-done "done"/"continue", empty-dir vacuous-done), `reveng-mermaid-validate`
-  (`mmdc` absent → skipped; present+broken → reports failure; present+valid → ok). Assert
+  (`mmdc` absent → skipped; present+broken → reports failure; present+valid → ok — present-cases
+  need `mmdc` on `PATH`, skip when absent). Assert
   observable behaviour (exit code + stdout status), not internals. Prior art:
   [`archon-ralph/template/scripts/ralph-*-cap.ts`](https://github.com/marc0der/archon-ralph/tree/HEAD/template/scripts).
 - **Workflow + command validation** — the fork ships a validator CLI (no need to import engine
