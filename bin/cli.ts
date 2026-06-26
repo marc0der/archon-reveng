@@ -68,6 +68,10 @@ function parseArgs(argv: readonly string[]): Options {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     switch (arg) {
+      case "--help":
+      case "-h":
+        console.log(HELP);
+        process.exit(0); // never returns — no fallthrough to the cases below.
       case "--force":
       case "-f":
         opts.force = true;
